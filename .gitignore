@@ -1,0 +1,9 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs
+/Host/.vs
+/Host/bin/Debug/net9.0
+/Host/obj
+/Logic/ContinetExpress.TT.Logic/obj
