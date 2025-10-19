@@ -9,7 +9,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Host", "Host", "{02EA681E-C
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Logic", "Logic", "{304FDD80-5315-4DD1-95E3-70BE724AF7B9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContinetExpress.TT.Logic", "Logic\ContinetExpress.TT.Logic\ContinetExpress.TT.Logic.csproj", "{54D20AE0-1600-4F30-BEB8-6C0D6272F740}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ContinetExpress.TT.Logic", "Logic\ContinetExpress.TT.Logic.csproj", "{54D20AE0-1600-4F30-BEB8-6C0D6272F740}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

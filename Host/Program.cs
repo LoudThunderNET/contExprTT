@@ -2,25 +2,38 @@ using ContinetExpress.TT.Logic;
 using ContinetExpress.TT.Logic.ApiClients;
 using ContinetExpress.TT.Logic.Models;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Http.Resilience;
-using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Retry;
 using Refit;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddEndpointsApiExplorer()
     .AddOpenApi()
-    .AddScoped<IHandler<DistanceRequest, float>, DistanceHandler>()
-    .AddRefitClient<IPlacesApi>()
-    .ConfigureHttpClient((sp, httpClient) => 
+    .AddScoped<IDistanceCalculator, DistanceCalculator>()
+    .AddScoped<IHandler<DistanceRequest, double>, DistanceHandler>()
+    .Decorate<IHandler<DistanceRequest, double>, DistanceCacheDecorator>()
+    .Configure<RedisSettings>(o => o.ConnectionString = builder.Configuration.GetConnectionString(RedisSettings.ConnectionStringName)!)
+    .AddResiliencePipeline(Consts.PollyRetryPipeline, builder =>
     {
-        var section= builder.Configuration.GetSection("PlacesApiSettings");
+        builder.AddRetry(new RetryStrategyOptions()
+        {
+            ShouldHandle = new PredicateBuilder()
+                .Handle<RedisConnectionException>()
+                .Handle<RedisTimeoutException>(),
+            MaxRetryAttempts = 3
+        });
+    })
+    .AddRefitClient<IPlacesApi>()
+    .ConfigureHttpClient((sp, httpClient) =>
+    {
+        var section = builder.Configuration.GetSection("PlacesApiSettings");
         httpClient.BaseAddress = section.GetValue<Uri>("BaseUri");
         httpClient.Timeout = section.GetValue<TimeSpan>("Timeout");
     })
-    .AddStandardHedgingHandler().Configure(o => o.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(10))
-    ;
+    .AddStandardResilienceHandler();
 
 var app = builder.Build();
 
@@ -28,10 +41,10 @@ var app = builder.Build();
 if (!app.Environment.IsProduction())
 {
     app.MapOpenApi();
-    app.UseSwaggerUI(o=> o.SwaggerEndpoint("/openapi/v1.json", "v1"));
+    app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "v1"));
 }
 
-app.MapGet("/distance/{src}/{dst}", (HttpContext ctx, string src, string dst, [FromServices] IHandler<DistanceRequest, float> distanceHandler) => 
+app.MapGet("/distance/{src}/{dst}", (HttpContext ctx, string src, string dst, [FromServices] IHandler<DistanceRequest, double> distanceHandler) => 
     distanceHandler.HandleAsync(new(src, dst), ctx.RequestAborted)
 )
 .WithName("distance")
