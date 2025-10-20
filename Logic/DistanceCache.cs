@@ -1,8 +1,6 @@
 ﻿using ContinetExpress.TT.Logic.Models;
-using Microsoft.Extensions.Options;
 using Polly.Registry;
-using Refit;
-using StackExchange.Redis;
+using StackExchange.Redis.Extensions.Core.Abstractions;
 
 namespace ContinetExpress.TT.Logic
 {
@@ -10,67 +8,42 @@ namespace ContinetExpress.TT.Logic
         : IHandler<DistanceRequest, double>
     {
         private readonly IHandler<DistanceRequest, double> _decoratee;
-        private readonly IOptions<RedisSettings> _redisSettings;
-        private readonly ResiliencePipelineProvider<string> _resiliencePipelineProvider;
-        private ConnectionMultiplexer? _muxer;
-        private IDatabase? _db;
+        private readonly IRedisDatabase _redisDatabase;
         public DistanceCacheDecorator(
             IHandler<DistanceRequest, double> decoratee, 
-            IOptions<RedisSettings> redisSettings,
-            ResiliencePipelineProvider<string> resiliencePipelineProvider)
+            IRedisDatabase redisDatabase)
         {
-            this._decoratee = decoratee;
-            _redisSettings = redisSettings;
-            this._resiliencePipelineProvider = resiliencePipelineProvider;
+            _decoratee = decoratee;
+            _redisDatabase = redisDatabase;
         }
 
         public async Task<double> HandleAsync(DistanceRequest distanceRequest, CancellationToken cancellationToken)
         {
-            Polly.ResiliencePipeline retryPipeline = _resiliencePipelineProvider.GetPipeline(Consts.PollyRetryPipeline);
-
-            var result = await retryPipeline.ExecuteAsync(callback:token => WorkAsync(distanceRequest, token), cancellationToken);
-
-            return result;
-        }
-
-        async Task<IDatabase?> GetDatabaseAsync()
-        {
+            var redisKey = $"{distanceRequest.Source}->{distanceRequest.Destination}";
+            double? distance = null;
+            bool redisAvailable = false;
             try
             {
-                _muxer ??= await ConnectionMultiplexer.ConnectAsync(_redisSettings.Value.ConnectionString);
-                _db ??= _muxer.GetDatabase();
-
-                return _db;
+                distance = await _redisDatabase
+                    .GetAsync<double>(redisKey)
+                    .WaitAsync(cancellationToken);
+                redisAvailable = true;
             }
             catch (Exception)
             {
-                return null;
+                distance = null;
             }
-        }
-
-        private async ValueTask<double> WorkAsync(DistanceRequest distanceRequest, CancellationToken token)
-        {
-            var db = await GetDatabaseAsync();
-            if (db != null)
+            
+            if (!distance.HasValue)
             {
-                var redisKey = new RedisKey($"{distanceRequest.Source}->{distanceRequest.Destination}");
-                RedisValue value = await db.StringGetAsync(redisKey);
-                if (value == RedisValue.Null)
+                distance = await _decoratee.HandleAsync(distanceRequest, cancellationToken);
+
+                if (redisAvailable)
                 {
-                    var distance = await _decoratee.HandleAsync(distanceRequest, token);
-                    await db.StringSetAsync(redisKey, new RedisValue(distance.ToString()));
-
-                    return distance;
+                    await _redisDatabase.AddAsync(redisKey, distance);
                 }
-
-                return double.Parse(value!);
             }
-            else
-            {
-                var distance = await _decoratee.HandleAsync(distanceRequest, token);
-
-                return distance;
-            }
+            return distance.Value;
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace ContinetExpress.TT.Logic.Models
+﻿namespace ContinetExpress.TT.Logic.Redis
 {
     public class RedisSettings
     {
