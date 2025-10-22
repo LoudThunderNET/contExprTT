@@ -1,4 +1,5 @@
-﻿namespace ContinetExpress.TT.Logic.Models
+﻿#nullable disable
+namespace ContinetExpress.TT.Logic.Models
 {
     public class AirportDto
     {

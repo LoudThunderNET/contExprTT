@@ -1,6 +1,6 @@
 ﻿using ContinetExpress.TT.Logic.Models;
 
-namespace ContinetExpress.TT.Logic
+namespace ContinetExpress.TT.Logic.Calculate
 {
     /// <summary>
     /// Калькулятор расстояния по географическим координатам.

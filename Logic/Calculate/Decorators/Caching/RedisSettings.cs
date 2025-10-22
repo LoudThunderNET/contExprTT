@@ -1,4 +1,7 @@
-﻿namespace ContinetExpress.TT.Logic.Redis
+﻿#nullable disable
+using ContinetExpress;
+
+namespace ContinetExpress.TT.Logic.Calculate.Decorators.Caching
 {
     public class RedisSettings
     {

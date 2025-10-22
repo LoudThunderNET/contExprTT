@@ -2,7 +2,17 @@
 {
     public class  Location
     {
-        public float Lon { get; set; }
-        public float Lat { get; set; }
+        public Location() 
+        { 
+        }
+
+        public Location(double lon, double lat) 
+        {
+            Lon = lon;
+            Lat = lat;
+        }
+
+        public double Lon { get; set; }
+        public double Lat { get; set; }
     }
 }
