@@ -1,5 +1,6 @@
 ﻿using ContinetExpress.TT.Logic.Models;
 using Microsoft.Extensions.Logging;
+using Polly.Registry;
 using StackExchange.Redis;
 
 namespace ContinetExpress.TT.Logic.Calculate.Decorators.Caching
@@ -36,7 +37,7 @@ namespace ContinetExpress.TT.Logic.Calculate.Decorators.Caching
                 logger.LogError(e, "Не удалось получить данны из кэша");
             }
             
-            if (!distance.HasValue)
+            if (!distance.HasValue || double.IsNaN(distance.Value))
             {
                 distance = await decoratee.HandleAsync(distanceRequest, cancellationToken);
 

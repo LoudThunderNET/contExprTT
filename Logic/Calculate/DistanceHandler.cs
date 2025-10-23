@@ -1,5 +1,6 @@
 ﻿using ContinetExpress.TT.Logic.ApiClients;
 using ContinetExpress.TT.Logic.Models;
+using Microsoft.Extensions.Logging;
 
 namespace ContinetExpress.TT.Logic.Calculate
 {
@@ -10,10 +11,12 @@ namespace ContinetExpress.TT.Logic.Calculate
 
     public class DistanceHandler(
         IDistanceCalculator distanceCalculator,
-        IPlacesApi placesApi) : IHandler<DistanceRequest, double?>
+        IPlacesApi placesApi,
+        ILogger<DistanceHandler> logger) : IHandler<DistanceRequest, double?>
     {
         public async Task<double?> HandleAsync(DistanceRequest distanceRequest, CancellationToken cancellationToken)
         {
+            logger.LogInformation("Получение координат от мастер-системы");
             var airportATask = placesApi.GetAirportAsync(distanceRequest.Source, cancellationToken);
             var airportBTask = placesApi.GetAirportAsync(distanceRequest.Destination, cancellationToken);
 

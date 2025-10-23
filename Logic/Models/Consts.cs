@@ -8,6 +8,6 @@ namespace ContinetExpress.TT.Logic.Models
 {
     public class Consts
     {
-        public const string PollyRetryPipeline = nameof(PollyRetryPipeline);
+        public const string RedisConnMuxCircuitBreakerPipeline = nameof(RedisConnMuxCircuitBreakerPipeline);
     }
 }

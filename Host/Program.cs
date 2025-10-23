@@ -14,77 +14,116 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Refit;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+const string DbConnectionStringName = "Db";
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
 
-builder.Services
-    .AddEndpointsApiExplorer()
-    .AddOpenApi()
-    .AddSingleton<IDistanceCalculator, DistanceCalculator>()
-    .AddSingleton<IHandler<DistanceRequest, double?>, DistanceHandler>()
-    .Decorate<IHandler<DistanceRequest, double?>, LocalStorageDecorator>()
-    .Decorate<IHandler<DistanceRequest, double?>, DistanceCacheDecorator>()
-    .AddSingleton<IRedisDbFactory, RedisDbFactory>()
-    .AddSingleton<IAirportsRepository, AirportsRepository>()
-    .AddSingleton<NpgsqlDataSource>(sp => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString("Db")!))
-    .Configure<RedisSettings>(o=>
-    {
-        o.ConnectionString = builder.Configuration.GetConnectionString(RedisSettings.ConnectionStringName) 
-            ?? throw new InvalidOperationException("Не задана строка подключения к Redis");
-    })
-    .Configure<PlacesApiSettings>(o => builder.Configuration.GetSection(PlacesApiSettings.SectionName).Bind(o))
-    .AddRefitClient<IPlacesApi>()
-    .ConfigureHttpClient((sp, httpClient) =>
-    {
-        var placesApiSettings = sp.GetRequiredService<IOptions<PlacesApiSettings>>().Value;
-        httpClient.BaseAddress = placesApiSettings.BaseUri;
-        httpClient.Timeout = placesApiSettings.Timeout;
-    })
-    .AddStandardResilienceHandler();
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline.
-if (!app.Environment.IsProduction())
+try
 {
-    app.MapOpenApi();
-    app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "v1"));
-}
+    Log.Information("Starting web application");
+    var builder = WebApplication.CreateBuilder(args);
 
-var dbConnString = app.Configuration.GetConnectionString("Db") ?? throw new InvalidOperationException("Не задана строка подключения к БД");
-var logger = new MicrosoftUpgradeLog(app.Services.GetRequiredService<ILogger<Program>>());
-EnsureDatabase.For.PostgresqlDatabase(dbConnString, logger);
-EnsureDatabase.For.PostgresqlSchema(dbConnString, "public", logger);
-
-var upgrader =
-    DeployChanges.To
-        .PostgresqlDatabase(dbConnString)
-        .LogTo(logger)
-        .WithScriptsFromFileSystem(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"Migrations"), new FileSystemScriptOptions
+    builder.Services
+        .AddSerilog()
+        .AddEndpointsApiExplorer()
+        .AddOpenApi()
+        .AddSingleton<IDistanceCalculator, DistanceCalculator>()
+        .AddSingleton<IHandler<DistanceRequest, double?>, DistanceHandler>()
+        .Decorate<IHandler<DistanceRequest, double?>, LocalStorageDecorator>() // считаем что БД надежнее и быстрее чем внешний API
+        .Decorate<IHandler<DistanceRequest, double?>, DistanceCacheDecorator>()
+        .AddSingleton<IRedisDbFactory, RedisDbFactory>()
+        .AddSingleton<IAirportsRepository, AirportsRepository>()
+        .AddSingleton(sp => NpgsqlDataSource.Create(builder.Configuration.GetConnectionString(DbConnectionStringName)!))
+        .Configure<RedisSettings>(o =>
         {
-            Extensions = ["*.sql", "*.psql"]
+            o.ConnectionString = builder.Configuration.GetConnectionString(RedisSettings.ConnectionStringName)
+                ?? throw new InvalidOperationException("Не задана строка подключения к Redis");
         })
-        .WithTransactionPerScript();
+        .Configure<PlacesApiSettings>(o => builder.Configuration.GetSection(PlacesApiSettings.SectionName).Bind(o))
+        .AddRefitClient<IPlacesApi>()
+        .ConfigureHttpClient((sp, httpClient) =>
+        {
+            var placesApiSettings = sp.GetRequiredService<IOptions<PlacesApiSettings>>().Value;
+            httpClient.BaseAddress = placesApiSettings.BaseUri;
+            httpClient.Timeout = placesApiSettings.Timeout;
+        })
+        .AddStandardResilienceHandler();
 
-UpgradeEngine upgradeEngine = upgrader
-    .LogScriptOutput()
-    .JournalToPostgresqlTable("public", "migrations")
-    .Build();
+    var app = builder.Build();
 
-if (upgradeEngine.IsUpgradeRequired())
-{
-    upgradeEngine.PerformUpgrade();
+    // Configure the HTTP request pipeline.
+    if (!app.Environment.IsProduction())
+    {
+        app.MapOpenApi();
+        app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "v1"));
+    }
+    var logger = new MicrosoftUpgradeLog(app.Services.GetRequiredService<ILogger<Program>>());
+    var dbConnString = app.Configuration.GetConnectionString(DbConnectionStringName);
+    if (string.IsNullOrEmpty(dbConnString))
+    {
+        logger.LogWarning("Не задана строка подключения к БД");
+    }
+    else
+    {
+        ApplyMigration(dbConnString, logger);
+    }
+
+    app.MapGet("/distance/{src}/{dst}", (HttpContext ctx, string src, string dst, [FromServices] IHandler<DistanceRequest, double?> distanceHandler) =>
+        distanceHandler.HandleAsync(new(src, dst), ctx.RequestAborted)
+    )
+    .WithName("distance")
+    .Produces<float>(StatusCodes.Status200OK)
+    .WithOpenApi();
+
+    app.Run();
 }
-else
+catch (Exception ex)
 {
-    logger.LogInformation("Обновление схемы БД не требуется");
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
 }
 
-app.MapGet("/distance/{src}/{dst}", (HttpContext ctx, string src, string dst, [FromServices] IHandler<DistanceRequest, double?> distanceHandler) => 
-    distanceHandler.HandleAsync(new(src, dst), ctx.RequestAborted)
-)
-.WithName("distance")
-.Produces<float>(StatusCodes.Status200OK)
-.WithOpenApi();
+static void ApplyMigration(string dbConnString, MicrosoftUpgradeLog logger)
+{ 
+    try
+    {
 
-app.Run();
+        EnsureDatabase.For.PostgresqlDatabase(dbConnString, logger);
+        EnsureDatabase.For.PostgresqlSchema(dbConnString, "public", logger);
+
+        var upgrader =
+            DeployChanges.To
+                .PostgresqlDatabase(dbConnString)
+                .LogTo(logger)
+                .WithScriptsFromFileSystem(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Migrations"), new FileSystemScriptOptions
+                {
+                    Extensions = ["*.sql", "*.psql"]
+                })
+                .WithTransactionPerScript();
+
+        UpgradeEngine upgradeEngine = upgrader
+            .LogScriptOutput()
+            .JournalToPostgresqlTable("public", "migrations")
+            .Build();
+
+        if (upgradeEngine.IsUpgradeRequired())
+        {
+            upgradeEngine.PerformUpgrade();
+        }
+        else
+        {
+            logger.LogInformation("Обновление схемы БД не требуется");
+        }
+        Global.MigrationAppied = true;
+    }
+    catch (Exception e)
+    {
+        logger.LogError(e, "Не удалось выполнить миграцию");
+    }
+}

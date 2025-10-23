@@ -1,5 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using ContinetExpress.TT.Logic.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Registry;
 using StackExchange.Redis;
 
 namespace ContinetExpress.TT.Logic.Calculate.Decorators.Caching
@@ -16,7 +19,9 @@ namespace ContinetExpress.TT.Logic.Calculate.Decorators.Caching
         private bool _disposedValue;
         private readonly ILogger<RedisDbFactory> _logger;
 
-        public RedisDbFactory(IOptions<RedisSettings> options, ILoggerFactory loggerFactory)
+        public RedisDbFactory(
+            IOptions<RedisSettings> options,
+            ILoggerFactory loggerFactory)
         {
             _configurationOptions = ConfigurationOptions.Parse(options.Value.ConnectionString);
             _configurationOptions.IncludeDetailInExceptions = true;

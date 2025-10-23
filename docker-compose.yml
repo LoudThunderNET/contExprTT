@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres_container
+    environment:
+      POSTGRES_DB: airport
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1q2w3e4r5t6y
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      
+  continentexpress.tt.api:
+    image: continent-express-tt-api
+    build:
+      context: .
+      dockerfile: Host/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+    ports:
+      - "5179:5179"
+    depends_on:
+      - postgres
+      - redis
+      
+  redis:
+    image: redis/redis-stack:latest
+    container_name: redis_container
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+volumes:
+  pgdata:
+

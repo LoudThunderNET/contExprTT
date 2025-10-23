@@ -1,6 +1,8 @@
 ﻿using ContinetExpress.TT.Logic.Calculate.Decorators.LocalStorage.Repositories;
 using ContinetExpress.TT.Logic.Models;
 using Microsoft.Extensions.Logging;
+using Polly;
+using System.Net;
 
 namespace ContinetExpress.TT.Logic.Calculate.Decorators.LocalStorage
 {
@@ -18,12 +20,12 @@ namespace ContinetExpress.TT.Logic.Calculate.Decorators.LocalStorage
                 var dbSrcAirport = airports.FirstOrDefault(a => a.IataCode == distanceRequest.Source);
                 if (dbSrcAirport == null)
                 {
-                    return null;
+                    goto from_db;
                 }
                 var dbDstAirport = airports.FirstOrDefault(a => a.IataCode == distanceRequest.Destination);
                 if (dbDstAirport == null)
                 {
-                    return null;
+                    goto from_db;
                 }
 
                 return distanceCalculator.Calculate(new Location(dbSrcAirport.Lon, dbSrcAirport.Lat), new Location(dbDstAirport.Lon, dbDstAirport.Lat));
@@ -32,7 +34,7 @@ namespace ContinetExpress.TT.Logic.Calculate.Decorators.LocalStorage
             {
                 logger.LogError(e, "не удалось получить координаты из БД");
             }
-
+        from_db:
             return await decoratee.HandleAsync(distanceRequest, cancellationToken);
         }
     }
