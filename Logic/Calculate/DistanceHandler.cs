@@ -14,15 +14,16 @@ namespace ContinetExpress.TT.Logic.Calculate
         IPlacesApi placesApi,
         ILogger<DistanceHandler> logger) : IHandler<DistanceRequest, double?>
     {
-        public async Task<double?> HandleAsync(DistanceRequest distanceRequest, CancellationToken cancellationToken)
+        public Task<double?> HandleAsync(DistanceRequest distanceRequest, CancellationToken cancellationToken)
         {
             logger.LogInformation("Получение координат от мастер-системы");
             var airportATask = placesApi.GetAirportAsync(distanceRequest.Source, cancellationToken);
             var airportBTask = placesApi.GetAirportAsync(distanceRequest.Destination, cancellationToken);
 
             Task.WaitAll(airportATask, airportBTask);
+            var distance = distanceCalculator.Calculate(airportATask.Result!.Location, airportBTask.Result!.Location);
 
-            return distanceCalculator.Calculate(airportATask.Result!.Location, airportBTask.Result!.Location);
+            return Task.FromResult<double?>(distance);
         }
     }
 }
