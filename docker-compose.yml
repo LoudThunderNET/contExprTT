@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:latest
     container_name: postgres_container
     environment:
       POSTGRES_DB: airport
@@ -9,12 +9,13 @@ services:
     ports:
       - "15432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata-18:/var/lib/postgresql/18/docker
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD-SHELL", "pg_isready -U postgres -d airport"]
+      interval: 5s
+      timeout: 3s
       retries: 5
+      start_period: 15s
       
   continentexpress.tt.api:
     image: continent-express-tt-api
@@ -26,9 +27,10 @@ services:
     ports:
       - "5179:5179"
     depends_on:
-      - postgres
-      - redis
-      
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
   redis:
     image: redis/redis-stack:latest
     container_name: redis_container
@@ -36,5 +38,5 @@ services:
       - "6379:6379"
       - "8001:8001"
 volumes:
-  pgdata:
+  pgdata-18:
 
