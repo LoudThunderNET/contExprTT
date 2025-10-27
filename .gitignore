@@ -12,3 +12,5 @@
 /DataAccess/ContinentExpress.TT.DataAccess/obj
 /DataAccess/ContinentExpress.TT.DataAccess/bin/Debug/net9.0
 /obj/Docker
+/bin/Debug
+/obj/Debug
